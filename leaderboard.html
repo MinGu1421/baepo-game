@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>W의 방탈출 · 실시간 리더보드</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: radial-gradient(ellipse at top, #2a1560 0%, #0d0820 70%); color: #fff;
+      font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; overflow: hidden; }
+    .wrap { height: 100%; display: flex; flex-direction: column; padding: 2.2vh 2.5vw; gap: 2vh; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
+    h1 { font-size: clamp(28px, 5.2vh, 64px); font-weight: 900; background: linear-gradient(90deg, #ffd23f, #ff6b9a, #a78bfa);
+      -webkit-background-clip: text; background-clip: text; color: transparent; white-space: nowrap; }
+    #status { font-size: clamp(14px, 2.2vh, 24px); opacity: 0.85; white-space: nowrap; }
+    #status i { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; background: #64748b; margin-right: 0.4em; vertical-align: -0.05em; }
+    #status.live i { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+    #status.poll i { background: #facc15; }
+    #status.off i { background: #ef4444; }
+    .cols { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6vw; }
+    .col { background: rgba(25, 14, 60, 0.86); border: 3px solid #8b5cf6; border-radius: 22px; padding: 1.8vh 1.4vw; display: flex; flex-direction: column; min-height: 0; }
+    .col h2 { text-align: center; font-size: clamp(20px, 3.6vh, 44px); margin-bottom: 1.2vh; }
+    .col.easy h2 { color: #86efac; } .col.normal h2 { color: #fde047; } .col.hard h2 { color: #fb7185; }
+    ol { list-style: none; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.7vh; }
+    li { flex: 1 1 0; min-height: 0; max-height: 8.5vh; display: flex; align-items: center; gap: 0.8vw; padding: 0 0.9vw; border-radius: 12px;
+      background: rgba(255, 255, 255, 0.07); font-size: clamp(14px, 2.5vh, 30px); }
+    li .rk { width: 2.4em; text-align: center; font-weight: 900; font-size: 1.1em; }
+    li .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    li .who small { opacity: 0.75; margin-right: 0.4em; }
+    li .tm { font-weight: 900; color: #ffd23f; font-variant-numeric: tabular-nums; }
+    li.top1 { background: linear-gradient(90deg, rgba(250, 204, 21, 0.35), rgba(255, 255, 255, 0.07)); }
+    li.empty { justify-content: center; opacity: 0.45; background: rgba(255, 255, 255, 0.03); }
+    li.new { animation: pop 2.4s ease-out; }
+    @keyframes pop { 0% { transform: scale(1.12); background: #f43f5e; } 25% { background: #facc15; color: #222; } 100% { transform: none; } }
+    footer { text-align: center; font-size: clamp(12px, 1.8vh, 20px); opacity: 0.6; }
+    @media (max-width: 800px) { .cols { grid-template-columns: 1fr; overflow-y: auto; } html, body { overflow: auto; } li { min-height: 44px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🏆 W의 방탈출 실시간 리더보드</h1>
+      <div id="status"><i></i><span>연결 중...</span></div>
+    </header>
+    <div class="cols" id="cols"></div>
+    <footer>⏱ 탈출까지 걸린 플레이 시간 — 짧을수록 높은 순위 · 새 기록이 올라오면 자동으로 바뀌어요</footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script>
+    (function () {
+      var S = G.CONFIG.supabase;
+      var SHOW = Math.max(3, Math.min(20, Number(new URLSearchParams(location.search).get('n')) || 10)); // ?n=5 처럼 줄 수 조절
+      var DIFFS = [['easy', '😊 쉬움'], ['normal', '😐 보통'], ['hard', '😈 어려움']];
+      var MEDAL = ['🥇', '🥈', '🥉'];
+      var seen = null;                  // 이미 화면에 있던 기록 id (새 기록 강조용)
+      var statusEl = document.getElementById('status');
+
+      var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+      var fmt = function (sec) { var m = Math.floor(sec / 60), s = sec - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1); };
+
+      var cols = document.getElementById('cols');
+      DIFFS.forEach(function (d) {
+        var c = document.createElement('div');
+        c.className = 'col ' + d[0];
+        c.innerHTML = '<h2>' + d[1] + '</h2><ol id="list-' + d[0] + '"></ol>';
+        cols.appendChild(c);
+      });
+
+      function setStatus(kind, text) { statusEl.className = kind; statusEl.querySelector('span').textContent = text; }
+
+      function render(byDiff) {
+        var first = seen === null, now = new Set();
+        DIFFS.forEach(function (d) {
+          var list = (byDiff[d[0]] || []).slice(0, SHOW);
+          var html = '';
+          for (var i = 0; i < SHOW; i++) {
+            var r = list[i];
+            if (!r) { html += '<li class="empty"><span class="rk">' + (i + 1) + '</span><span class="who">—</span></li>'; continue; }
+            now.add(r.id);
+            var isNew = !first && !seen.has(r.id);
+            html += '<li class="' + (i === 0 ? 'top1 ' : '') + (isNew ? 'new' : '') + '">' +
+              '<span class="rk">' + (MEDAL[i] || (i + 1)) + '</span>' +
+              '<span class="who"><small>' + esc(r.grade) + '학년 ' + esc(r.class_no) + '반</small><b>' + esc(r.nick) + '</b></span>' +
+              '<span class="tm">' + fmt(Number(r.time_sec)) + '</span></li>';
+          }
+          document.getElementById('list-' + d[0]).innerHTML = html;
+        });
+        seen = now;
+      }
+
+      var sb = null;
+      // 난이도마다 따로 상위 SHOW개를 받아요.
+      // (전체를 한 번에 1000개만 받아 나누면, 기록이 쌓였을 때 시간이 긴 어려움/보통 기록이 잘려 나가요)
+      function fetchDiff(diff) {
+        return fetch(S.url + '/rest/v1/' + S.table + '?select=id,difficulty,grade,class_no,nick,time_sec&difficulty=eq.' + diff +
+          '&order=time_sec.asc,id.asc&limit=' + SHOW,
+          { headers: { apikey: S.key, Authorization: 'Bearer ' + S.key } })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+      }
+      function refresh() {
+        return Promise.all(DIFFS.map(function (d) { return fetchDiff(d[0]); }))
+          .then(function (lists) { var by = {}; DIFFS.forEach(function (d, i) { by[d[0]] = lists[i]; }); render(by); return true; })
+          .catch(function () { setStatus('off', '서버에 연결할 수 없어요 (다시 시도 중)'); return false; });
+      }
+
+      refresh();
+      setInterval(function () { refresh().then(function (ok) { if (ok && statusEl.className !== 'live') setStatus('poll', '5초마다 새로고침 중'); }); }, 5000); // 실시간이 끊겨도 5초마다 보정
+
+      try {
+        sb = window.supabase.createClient(S.url, S.key);
+        sb.channel('booth-leaderboard')
+          .on('postgres_changes', { event: '*', schema: 'public', table: S.table }, function () { refresh(); })
+          .subscribe(function (st) {
+            if (st === 'SUBSCRIBED') setStatus('live', '실시간 연결됨');
+            else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') setStatus('poll', '5초마다 새로고침 중');
+          });
+      } catch (e) { setStatus('poll', '5초마다 새로고침 중'); }
+    })();
+  </script>
+</body>
+</html>

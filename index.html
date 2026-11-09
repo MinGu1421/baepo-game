@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>W의 방탈출</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game"></div>
+  <div id="vignette"></div>
+  <div id="blind-overlay"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="parts-strip"></div>
+    <div class="hud-tl">
+      <div id="hearts"></div>
+      <div id="room-name"></div>
+      <div id="objective"></div>
+    </div>
+    <div class="hud-tr">
+      <div id="timer"></div>
+      <div id="bag-bar"></div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="radar" class="hidden"><div id="radar-arrow">▲</div><div id="radar-text"></div></div>
+    <div id="toast-area"></div>
+    <div id="room-banner"></div>
+    <div class="hud-bottom">
+      <div id="status-icons"></div>
+      <div id="stamina"><div id="stamina-fill"></div><span>달리기 체력</span></div>
+      <div id="key-hints">WASD 이동 · Shift 달리기 · Space 점프 · E/클릭 상호작용 · Q 셀카폰 · Tab 가방 · M 소리 · ESC 일시정지</div>
+    </div>
+    <div id="minimap-wrap">
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div id="minimap-label"></div>
+    </div>
+  </div>
+  <div id="subtitle" class="hidden"></div>
+
+  <div id="bag-panel" class="hidden">
+    <h2>🎒 가방</h2>
+    <div id="bag-content"></div>
+    <p class="small">Tab / I 키로 닫기 · 가방 속 물건은 잡혀도 사라지지 않아요</p>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="start-screen" class="screen hidden">
+    <div class="title-layout">
+      <div class="panel">
+        <h1>W의 방탈출</h1>
+        <p class="sub">"W를 가져가" 춤추는 납치범을 피해 집과 미로를 탈출하라!</p>
+        <div class="story">
+          <p>🛏️ 침실 → 🛋️ 거실 → 🛁 화장실 → 🛋️ 거실 계단 → 🚪 1층 → 🍳 부엌 → 🌿 미로 → 🎉 탈출</p>
+          <p>방마다 <b>상자에서 열쇠</b>를 찾고, <b>미니게임</b>으로 <b>노스니의 몸 5조각</b>을 모으자.<br>
+            미로 맨 끝 <b>조합대</b>에서 몸을 조립하고 <b>심장</b>을 주면 탈출! (목숨 ❤️×3 · 제한시간 8분)</p>
+          <p class="parts-map">🛏️침실=🙂머리 · 🛋️거실=💪팔 · 🛁화장실=🦵다리 · 🚪1층=🖐️손 · 🍳부엌=👕몸통</p>
+        </div>
+        <div class="controls">
+          <div><kbd>W A S D</kbd> 이동</div>
+          <div><kbd>마우스</kbd> 둘러보기</div>
+          <div><kbd>Shift</kbd> 달리기 · <kbd>Space</kbd> 점프</div>
+          <div><kbd>E</kbd>/<kbd>클릭</kbd> 상자·문·미니게임</div>
+          <div><kbd>Q</kbd> 셀카폰 (납치범 위치)</div>
+          <div><kbd>Tab</kbd> 가방 · <kbd>ESC</kbd> 일시정지</div>
+        </div>
+        <button id="btn-start" class="big">▶ 시작하기 (Enter)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 개인정보 동의 -->
+  <div id="consent-screen" class="screen hidden">
+    <div class="panel consent">
+      <h2>📋 개인정보 수집·이용 동의</h2>
+      <p>「W의 방탈출」 리더보드(순위표)에 기록을 남기기 위해 아래 정보를 받아요.</p>
+      <table>
+        <tr><th>수집 항목</th><td>학년, 반, 닉네임, 클리어 시간</td></tr>
+        <tr><th>이용 목적</th><td>리더보드(게임 화면과 행사장 전광판)에 학년·반·닉네임·클리어 시간 표시</td></tr>
+        <tr><th>보관 장소·기간</th><td>행사용 온라인 서버(Supabase)에 저장되고, 순위표가 공개 화면에 보여요. 행사가 끝나면 삭제해요</td></tr>
+        <tr><th>동의 거부</th><td>동의하지 않아도 게임은 할 수 있지만, 리더보드에는 기록되지 않아요</td></tr>
+      </table>
+      <p class="q">위 내용에 동의하십니까?</p>
+      <button id="btn-agree" class="big">✅ 동의합니다</button>
+      <button id="btn-disagree">동의하지 않음 (기록 없이 플레이)</button>
+    </div>
+  </div>
+
+  <!-- 플레이어 정보 -->
+  <div id="profile-screen" class="screen hidden">
+    <div class="panel profile">
+      <h2>✏️ 플레이어 정보</h2>
+      <div class="form-row">
+        <label>학년 <select id="in-grade"></select></label>
+        <label>반 <input id="in-class" type="number" min="1" max="20" placeholder="반"></label>
+      </div>
+      <div class="form-row">
+        <label class="wide">닉네임 <input id="in-nick" type="text" maxlength="8" placeholder="최대 8글자" autocomplete="off"></label>
+      </div>
+      <p id="profile-error" class="err"></p>
+      <button id="btn-profile-ok" class="big">▶ 시작하기</button>
+      <button id="btn-profile-back">뒤로</button>
+    </div>
+  </div>
+
+  <!-- 난이도 선택 (로그인 뒤) -->
+  <div id="difficulty-screen" class="screen hidden">
+    <div class="panel">
+      <h2 id="diff-hello">난이도를 골라주세요</h2>
+      <div class="diff-buttons">
+        <button data-diff="easy">😊 쉬움</button>
+        <button data-diff="normal">😐 보통</button>
+        <button data-diff="hard">😈 어려움</button>
+      </div>
+      <p id="diff-lock" class="err"></p>
+      <div id="diff-info"></div>
+      <button id="btn-diff-start" class="big">▶ 게임 시작 (Enter)</button>
+      <button id="btn-diff-back">처음 화면</button>
+    </div>
+  </div>
+
+  <div id="skip-layer" class="screen hidden">
+    <div class="skip-hint">클릭 또는 스페이스바: 건너뛰기 ⏭</div>
+  </div>
+
+  <div id="resume-screen" class="screen hidden">
+    <div class="panel click-panel">
+      <h2>🖱️ 화면을 클릭하면 시작해요</h2>
+      <p>마우스를 움직이면 주위를 둘러볼 수 있어요</p>
+    </div>
+  </div>
+
+  <div id="pause-screen" class="screen hidden">
+    <div class="panel">
+      <h2>⏸ 일시정지</h2>
+      <div class="col">
+        <button id="btn-resume" class="big">▶ 계속하기</button>
+        <button id="btn-sound">🔊 소리 켜짐 (M)</button>
+        <button id="btn-restart">🔄 새 게임 (R)</button>
+        <button id="btn-title">🏠 처음 화면</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="caught-screen" class="screen hidden">
+    <div class="caught-text">
+      <h1>잡혔다!</h1>
+      <p id="caught-sub"></p>
+    </div>
+  </div>
+
+  <div id="gameover-screen" class="screen hidden">
+    <div class="panel">
+      <h1 class="bad">GAME OVER</h1>
+      <p id="gameover-why" class="sub"></p>
+      <p id="gameover-stats" class="stats"></p>
+      <button id="btn-retry" class="big">🔄 다시 하기 (R)</button>
+      <button id="btn-title2">🏠 처음 화면 (다음 사람)</button>
+    </div>
+  </div>
+
+  <div id="win-screen" class="screen hidden">
+    <div class="panel">
+      <h1>🎉 탈출 성공! 🎉</h1>
+      <p class="sub">노스니와 함께 납치범의 집을 탈출했다!</p>
+      <p id="win-stats" class="stats"></p>
+      <h3 id="win-board-title"></h3>
+      <ol id="win-board" class="board"></ol>
+      <button id="btn-again" class="big">🔄 다시 하기 (R)</button>
+      <button id="btn-title3">🏠 처음 화면 (다음 사람)</button>
+    </div>
+  </div>
+
+  <div id="minigame" class="screen hidden">
+    <div class="mg-box">
+      <div class="mg-head"><h2 id="mg-title"></h2><div id="mg-info"></div></div>
+      <canvas id="mg-canvas" width="900" height="560"></canvas>
+      <div id="mg-buttons"></div>
+    </div>
+  </div>
+
+  <div id="load-error" class="screen hidden">
+    <div class="panel">
+      <h2>⚠️ 3D 엔진을 불러오지 못했어요</h2>
+      <p>인터넷 연결을 확인해 주세요.<br>인터넷이 없는 곳이라면 README의 "오프라인 실행" 방법대로 <b>lib/three.min.js</b> 파일을 넣어 주세요.</p>
+    </div>
+  </div>
+
+  <div id="flash"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>if (!window.THREE) document.write('<script src="lib/three.min.js"><\/script>');</script>
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/rooms.js"></script>
+  <script src="js/maze.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/minigames.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/enemy.js"></script>
+  <script src="js/ending.js"></script>
+  <script src="js/cutscenes.js"></script>
+  <script src="js/leaderboard.js"></script>
+  <script src="js/minimap.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>W의 방탈출 · 관리자</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; background: radial-gradient(ellipse at top, #2a1560 0%, #0d0820 70%); color: #fff;
+      font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
+    body { display: flex; justify-content: center; padding: 4vh 4vw; }
+    .wrap { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 22px; }
+    h1 { font-size: clamp(28px, 5vh, 52px); font-weight: 900; text-align: center; background: linear-gradient(90deg, #ffd23f, #ff6b9a, #a78bfa);
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .card { background: rgba(25, 14, 60, 0.86); border: 3px solid #8b5cf6; border-radius: 22px; padding: 24px 26px; }
+    .card h2 { font-size: 24px; margin-bottom: 14px; }
+    label { display: block; font-size: 18px; margin-bottom: 8px; opacity: 0.9; }
+    input[type=password] { width: 100%; font-size: 24px; padding: 12px 16px; border-radius: 12px; border: 2px solid #8b5cf6;
+      background: rgba(255, 255, 255, 0.08); color: #fff; outline: none; }
+    input[type=password]:focus { border-color: #ffd23f; }
+    .counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .count { text-align: center; padding: 14px 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.07); }
+    .count .k { font-size: 18px; }
+    .count .v { font-size: 34px; font-weight: 900; color: #ffd23f; font-variant-numeric: tabular-nums; margin-top: 4px; }
+    .count.easy .k { color: #86efac; } .count.normal .k { color: #fde047; } .count.hard .k { color: #fb7185; }
+    .btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    button { font: inherit; font-size: 22px; font-weight: 900; padding: 16px 10px; border-radius: 14px; border: 0; cursor: pointer; color: #fff;
+      background: #4c1d95; transition: transform 0.08s, filter 0.15s; }
+    button:hover { filter: brightness(1.15); }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.all { grid-column: 1 / -1; background: linear-gradient(90deg, #be123c, #7c3aed); }
+    button.link { background: none; font-size: 16px; padding: 4px 8px; text-decoration: underline; opacity: 0.8; }
+    #confirm { display: none; text-align: center; }
+    #confirm.show { display: block; }
+    #confirm p { font-size: 26px; font-weight: 900; margin-bottom: 16px; }
+    #confirm .row { display: flex; gap: 12px; justify-content: center; }
+    #confirm .row button { min-width: 160px; }
+    #confirm .yes { background: #dc2626; }
+    #confirm .no { background: #475569; }
+    #msg { min-height: 1.6em; text-align: center; font-size: 24px; font-weight: 900; }
+    #msg.ok { color: #86efac; } #msg.err { color: #fb7185; } #msg.wait { color: #fde047; }
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .top h2 { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🔐 W의 방탈출 관리자</h1>
+
+    <div class="card">
+      <label for="pw">관리자 비밀번호</label>
+      <input type="password" id="pw" autocomplete="off" placeholder="비밀번호를 입력하세요">
+    </div>
+
+    <div class="card">
+      <div class="top"><h2>📊 현재 기록 개수</h2><button class="link" id="reload">새로고침</button></div>
+      <div class="counts">
+        <div class="count easy"><div class="k">😊 쉬움</div><div class="v" id="c-easy">-</div></div>
+        <div class="count normal"><div class="k">😐 보통</div><div class="v" id="c-normal">-</div></div>
+        <div class="count hard"><div class="k">😈 어려움</div><div class="v" id="c-hard">-</div></div>
+        <div class="count"><div class="k">전체</div><div class="v" id="c-all">-</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🧹 리더보드 초기화</h2>
+      <div class="btns" id="btns">
+        <button data-diff="easy">쉬움 초기화</button>
+        <button data-diff="normal">보통 초기화</button>
+        <button data-diff="hard">어려움 초기화</button>
+        <button data-diff="">—</button>
+        <button data-diff="all" class="all">⚠️ 전체 초기화</button>
+      </div>
+      <div id="confirm">
+        <p id="confirm-text"></p>
+        <div class="row"><button class="yes" id="yes">네, 지울게요</button><button class="no" id="no">취소</button></div>
+      </div>
+    </div>
+
+    <div id="msg"></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script>
+    (function () {
+      var S = G.CONFIG.supabase;
+      var LABEL = { easy: '쉬움', normal: '보통', hard: '어려움', all: '전체' };
+      var $ = function (id) { return document.getElementById(id); };
+      var pending = null; // 확인을 기다리는 난이도
+      var busy = false;
+
+      // 빈 자리 버튼 숨기기 (2열 배치 맞춤용)
+      document.querySelector('[data-diff=""]').style.visibility = 'hidden';
+
+      function msg(kind, text) { $('msg').className = kind; $('msg').textContent = text; }
+
+      function loadCounts() {
+        return fetch(S.url + '/rest/v1/' + S.table + '?select=difficulty&limit=100000',
+          { headers: { apikey: S.key, Authorization: 'Bearer ' + S.key } })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function (rows) {
+            var c = { easy: 0, normal: 0, hard: 0 };
+            rows.forEach(function (r) { if (r.difficulty in c) c[r.difficulty]++; });
+            $('c-easy').textContent = c.easy; $('c-normal').textContent = c.normal; $('c-hard').textContent = c.hard;
+            $('c-all').textContent = rows.length;
+          })
+          .catch(function () { msg('err', '기록 개수를 불러오지 못했어요'); });
+      }
+
+      function ask(diff) {
+        if (busy) return;
+        if (!$('pw').value) { msg('err', '비밀번호를 먼저 입력하세요'); $('pw').focus(); return; }
+        pending = diff;
+        var n = $(diff === 'all' ? 'c-all' : 'c-' + diff).textContent;
+        $('confirm-text').textContent = '정말 ' + LABEL[diff] + ' 기록 ' + n + '개를 지울까요?';
+        $('btns').style.display = 'none';
+        $('confirm').classList.add('show');
+        msg('', '');
+      }
+
+      function closeConfirm() {
+        pending = null;
+        $('confirm').classList.remove('show');
+        $('btns').style.display = '';
+      }
+
+      function reset() {
+        if (!pending || busy) return;
+        var diff = pending;
+        busy = true;
+        $('yes').disabled = $('no').disabled = true;
+        msg('wait', '지우는 중...');
+        fetch(S.url + '/rest/v1/rpc/reset_leaderboard', {
+          method: 'POST',
+          headers: { apikey: S.key, Authorization: 'Bearer ' + S.key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_password: $('pw').value, p_difficulty: diff === 'all' ? null : diff }),
+        })
+          .then(function (r) { return r.json().catch(function () { return null; }).then(function (b) { return { ok: r.ok, body: b }; }); })
+          .then(function (res) {
+            if (res.ok) {
+              msg('ok', '✅ ' + LABEL[diff] + ' 기록 ' + res.body + '개 삭제했어요');
+            } else if (res.body && /wrong password/.test(res.body.message || '')) {
+              msg('err', '❌ 비밀번호가 틀렸어요');
+              $('pw').select();
+            } else {
+              msg('err', '오류가 났어요: ' + ((res.body && res.body.message) || '알 수 없음'));
+            }
+          })
+          .catch(function () { msg('err', '서버에 연결할 수 없어요'); })
+          .then(function () {
+            busy = false;
+            $('yes').disabled = $('no').disabled = false;
+            closeConfirm();
+            loadCounts();
+          });
+      }
+
+      document.querySelectorAll('#btns [data-diff]').forEach(function (b) {
+        if (b.dataset.diff) b.addEventListener('click', function () { ask(b.dataset.diff); });
+      });
+      $('yes').addEventListener('click', reset);
+      $('no').addEventListener('click', function () { closeConfirm(); msg('', '취소했어요'); });
+      $('reload').addEventListener('click', loadCounts);
+
+      loadCounts();
+    })();
+  </script>
+</body>
+</html>
