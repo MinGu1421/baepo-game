@@ -67,6 +67,8 @@
       this.lives = C.lives;
       this.elapsed = 0;
       this.timeLeft = C.timeLimit;
+      this.runStart = 0;   // 처음 조작을 시작한 순간 (실제 시계)
+      this.clearTime = 0;  // 순위표에 올라가는 클리어 시간(초)
       this.fx = { blind: 0, slow: 0, radar: 0, selfieCd: 0, invuln: 0 };
       this.mazeEntered = false;
       this.curRoom = 'bedroom';
@@ -504,6 +506,9 @@
     },
 
     giveHeart() {
+      // 클리어 시간 = 처음 조작 시작 ~ 심장을 준 순간까지 실제로 흐른 시간
+      // (일시정지·"클릭해서 계속" 화면·잡힌 뒤 대기·미니게임 모두 포함, 엔딩 컷신은 제외)
+      this.clearTime = this.runStart ? (performance.now() - this.runStart) / 1000 : this.elapsed;
       this.state = 'ending';
       G.World.nosni.revived = true;
       G.UI.prompt(null); G.UI.bag(false); G.UI.hud(false);
@@ -568,7 +573,7 @@
     },
 
     stats() {
-      const m = Math.floor(this.elapsed / 60), s = Math.floor(this.elapsed % 60);
+      const m = Math.floor(this.clearTime / 60), s = Math.floor(this.clearTime % 60);
       return `⏱ 클리어 시간 <b>${m}분 ${s}초</b> · ❤️ 남은 목숨 <b>${this.lives}</b> · 난이도 <b>${this.diff().label}</b>`;
     },
 
@@ -593,7 +598,7 @@
       if (this.player) {
         const p = this.player;
         G.UI.set('win-stats', `${stats}<br>⏳ 순위표에 기록하는 중...`);
-        G.Leaderboard.add(diff, p, this.elapsed).then((rank) => {
+        G.Leaderboard.add(diff, p, this.clearTime).then((rank) => {
           if (this.state !== 'win') return; // 그 사이 다시 시작했으면 무시
           const who = `<b>${p.grade}학년 ${p.cls}반 ${G.UI.esc(p.nick)}</b>`;
           const rankText = rank
@@ -682,6 +687,7 @@
         const locked = document.pointerLockElement === this.renderer.domElement;
         if (locked) {
           if (this.state === 'ready' || this.state === 'paused') {
+            if (!this.runStart) this.runStart = performance.now(); // 인트로가 끝나고 처음 조작을 시작한 순간부터 기록 시작
             this.state = 'playing';
             G.UI.screen(null);
             G.Audio.setMusic(true);
